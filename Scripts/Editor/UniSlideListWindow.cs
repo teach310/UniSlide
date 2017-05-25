@@ -3,42 +3,28 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using UnityEditorInternal;
+using UniRx;
 
 namespace UniSlide
 {
-	public class UniSlideListWindow : EditorWindow
+	public class UniSlideListWindow : EditorWindowBase
 	{
 
-		private bool isInited = false;
 		private bool isOpenSlide = false;
-		[SerializeField]
-		private ReorderableList _slideList = null;
-		[SerializeField]
-		private SerializedObject so = null;
 		private string _soPath = string.Empty;
 
 		public static int selectedIndex = -1;
 		private Vector2 _scrollPos = Vector2.zero;
 
+		[SerializeField]
+		UniSlideListWindowView view;
 
 		[MenuItem ("Tools/UniSlideListWindow")]
 		static void Open ()
 		{
-			GetWindow<UniSlideListWindow> ();
+			GetWindow<UniSlideListWindow> ("ListView");
 		}
-
-		// 初期化
-		void InitializeIfNeeded ()
-		{
-			if (isInited == true) {
-				return;
-			}
-
-			titleContent = new GUIContent ("ListView");
-			isInited = true;
-
-
-		}
+			
 
 		// 値の反映
 		void OnInspectorUpdate(){
@@ -52,55 +38,49 @@ namespace UniSlide
 		// 選択したデータの情報取得
 		void SelectDatabaseObject (UniSlideObject uniSlideObject)
 		{
-			if (uniSlideObject == null) {
-				_slideList = null;
-				so = null;
-			} else {
+			view.ResetList (uniSlideObject);
+			if (uniSlideObject != null) {
 				// ScriptableObject の　Pathを取得
 				_soPath = AssetDatabase.GetAssetPath (uniSlideObject);
-
-				_slideList = new ReorderableList(uniSlideObject.slideList, typeof(UniSlideData), true, true, true, true);
-				_slideList.drawHeaderCallback = (Rect rect) => { EditorGUI.LabelField(rect, uniSlideObject.name); };
-				_slideList.elementHeight = UniSlideData.SlideImgHeight + 4;
-				_slideList.drawElementCallback = DrawProperty;
-				_slideList.onAddCallback += OnAddItem;
-				_slideList.onRemoveCallback += OnRemoveItem;
-				_slideList.onSelectCallback += OnSelectItem;
-
-
-				so = new SerializedObject (uniSlideObject);
-
 			}
 			Repaint ();
 		}
 
-		void DrawProperty(Rect rect, int index, bool isActive, bool isFocused)
+		protected override void Init ()
 		{
-			var slideListSO = so.FindProperty ("slideList");
-			var element = slideListSO.GetArrayElementAtIndex (index);
-			rect.height -= 4;
-			rect.y += 2;
-			//EditorGUI.PropertyField (rect, element);
-
-
-			// 各プロパティーの SerializeProperty を求める
-			var iconProperty = element.FindPropertyRelative ("rt");
-			var tex = (Texture)iconProperty.objectReferenceValue;
-
-			var iconRect = new Rect (rect) {
-				width = UniSlideData.SlideImgWidth,
-			};
-			if (tex == null) {
-				return;
-			}
-			GUI.DrawTexture (iconRect, tex);
-
-
+			view = new UniSlideListWindowView ();
+			SetListener ();
 		}
 
+		void SetListener(){
+			view.OnAddItemAsObservable ().Subscribe (slideList => {
 
 
+				var element = CreateCamera ();
 
+				// 要素を追加
+				slideList.list.Add (element);
+
+
+				// 最後の要素を選択状態にする
+				slideList.index = slideList.count - 1;
+				// 増やした場合のみこちらで変更
+				USCameraController.Instance.events.UpdateMap (USCameraController.Instance.slideData);
+				Repaint ();
+			});
+
+			view.OnRemoveItemAsObservable ().Subscribe (slideList => {
+				USCameraController.Instance.slideData.DeleteRT(slideList.index);
+				AssetDatabase.ImportAsset (_soPath);
+				ReorderableList.defaultBehaviours.DoRemoveButton (slideList);
+				Repaint ();
+			});
+
+			view.OnSelectItemAsObservable ().Subscribe (slideList=>{
+				selectedIndex = slideList.index;
+			});
+		}
+			
 		void OnGUI ()
 		{
 			InitializeIfNeeded ();
@@ -117,63 +97,27 @@ namespace UniSlide
 				return;
 			}
 
-			if (so == null)
+			if (view.so == null)
 				isOpenSlide = false;
 
 			if (!isOpenSlide) {
 				SelectDatabaseObject (USCameraController.Instance.slideData);
 				isOpenSlide = true;
 			}
-
-
-
-			if (so == null)
+				
+			if (view.so == null)
 				return;
 
-
-
-			so.Update ();
+			view.so.Update ();
 
 			using (var scrollView = new EditorGUILayout.ScrollViewScope (_scrollPos)) {
 				_scrollPos = scrollView.scrollPosition;
-				// リスト表示
-				_slideList.DoLayoutList ();
-				selectedIndex = _slideList.index;
+				view.OnGUI ();
+				selectedIndex = view._slideList.index;
 			}
 
-			so.ApplyModifiedProperties ();
+			view.so.ApplyModifiedProperties ();
 		}
-
-		void OnAddItem (ReorderableList slideList)
-		{
-			var element = CreateCamera();
-
-			// 要素を追加
-			slideList.list.Add(element);
-
-
-			// 最後の要素を選択状態にする
-			slideList.index = slideList.count - 1;
-			// 増やした場合のみこちらで変更
-			USCameraController.Instance.events.UpdateMap (USCameraController.Instance.slideData);
-			Repaint ();
-
-		}
-
-
-		void OnRemoveItem(ReorderableList slideList){
-
-			USCameraController.Instance.slideData.DeleteRT(slideList.index);
-			AssetDatabase.ImportAsset (_soPath);
-			ReorderableList.defaultBehaviours.DoRemoveButton (slideList);
-			Repaint ();
-		}
-
-		void OnSelectItem(ReorderableList slideList){
-			selectedIndex = slideList.index;
-		}
-
-
 
 		public UniSlideData CreateCamera(){
 			
