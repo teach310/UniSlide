@@ -7,133 +7,146 @@ using UniRx;
 
 namespace UniSlide
 {
-	public class UniSlideListWindow : EditorWindowBase
-	{
+    /// <summary>
+    /// Slide表示WindowPresenter
+    /// </summary>
+    public class UniSlideListWindow : EditorWindowBase
+    {
+        private string _soPath = string.Empty;
 
-		private bool isOpenSlide = false;
-		private string _soPath = string.Empty;
-
-		public static int selectedIndex = -1;
-		private Vector2 _scrollPos = Vector2.zero;
-
-		[SerializeField]
-		UniSlideListWindowView view;
-
-		[MenuItem ("Tools/UniSlideListWindow")]
-		static void Open ()
-		{
-			GetWindow<UniSlideListWindow> ("ListView");
-		}
-			
-
-		// 値の反映
-		void OnInspectorUpdate(){
-			if (!USCameraController.HasInstance()) {
-				return;
-			}
-			USCameraController.Instance.UpdateSlideData ();
-			Repaint ();
-		}
-
-		// 選択したデータの情報取得
-		void SelectDatabaseObject (UniSlideObject uniSlideObject)
-		{
-			view.ResetList (uniSlideObject);
-			if (uniSlideObject != null) {
-				// ScriptableObject の　Pathを取得
-				_soPath = AssetDatabase.GetAssetPath (uniSlideObject);
-			}
-			Repaint ();
-		}
-
-		protected override void Init ()
-		{
-			view = new UniSlideListWindowView ();
-			SetListener ();
-		}
-
-		void SetListener(){
-			view.OnAddItemAsObservable ().Subscribe (slideList => {
+        public static int selectedIndex = -1;
 
 
-				var element = CreateCamera ();
+        [SerializeField]
+        UniSlideListWindowView view;
+        //		[SerializeField]
+        //		UniSlideListWindowUseCase useCase;
 
-				// 要素を追加
-				slideList.list.Add (element);
+        public UniSlideObject uniSlideObject;
+
+        [MenuItem("Tools/UniSlideListWindow")]
+        static void Open()
+        {
+            GetWindow<UniSlideListWindow>("ListView");
+        }
+
+        void OnSelectionChange()
+        {
+            UniSlideObject tempObject = null;
 
 
-				// 最後の要素を選択状態にする
-				slideList.index = slideList.count - 1;
-				// 増やした場合のみこちらで変更
-				USCameraController.Instance.events.UpdateMap (USCameraController.Instance.slideData);
-				Repaint ();
-			});
+            // GameObject選択時
+            if (Selection.activeGameObject != null)
+            {
+                var uscc = Selection.activeGameObject.GetComponent<USCameraController>();
+                // CameraControllerからUniSlideObjectを取得
+                if (uscc != null)
+                    tempObject = uscc.slideObject;
 
-			view.OnRemoveItemAsObservable ().Subscribe (slideList => {
-				USCameraController.Instance.slideData.DeleteRT(slideList.index);
-				AssetDatabase.ImportAsset (_soPath);
-				ReorderableList.defaultBehaviours.DoRemoveButton (slideList);
-				Repaint ();
-			});
+            }
+            else
+            {
+                // 直接UniSlideObjectを選択
+                tempObject = Selection.activeObject as UniSlideObject;
+            }
+            if (tempObject != null) SelectDatabaseObject(tempObject);
+        }
 
-			view.OnSelectItemAsObservable ().Subscribe (slideList=>{
-				selectedIndex = slideList.index;
-			});
-		}
-			
-		void OnGUI ()
-		{
-			InitializeIfNeeded ();
-			if (!USCameraController.HasInstance()) {
-				isOpenSlide = false;
-				EditorGUILayout.LabelField ("USCameraController is not in the scene");
-				EditorGUILayout.LabelField ("Or Play Once");
-				return;
-			}
+        // 選択したデータの情報取得
+        void SelectDatabaseObject(UniSlideObject slide)
+        {
+            if (slide == this.uniSlideObject)
+                return;
 
-			if (USCameraController.Instance.slideData == null) {
-				isOpenSlide = false;
-				EditorGUILayout.LabelField ("slidedata is null");
-				return;
-			}
+            view.ResetList(slide);
+            if (slide != null)
+            {
+                this.uniSlideObject = slide;
+                // ScriptableObject の　Pathを取得
+                _soPath = AssetDatabase.GetAssetPath(uniSlideObject);
+            }
+            Repaint();
+        }
 
-			if (view.so == null)
-				isOpenSlide = false;
+        protected override void Init()
+        {
+            view = new UniSlideListWindowView();
+            //			useCase = new UniSlideListWindowUseCase ();
+            SetListener();
+        }
 
-			if (!isOpenSlide) {
-				SelectDatabaseObject (USCameraController.Instance.slideData);
-				isOpenSlide = true;
-			}
-				
-			if (view.so == null)
-				return;
+        void SetListener()
+        {
+            view.OnAddItemAsObservable().Subscribe(slideList =>
+            {
+                var element = CreateCamera();
 
-			view.so.Update ();
+                // 要素を追加
+                slideList.list.Add(element);
 
-			using (var scrollView = new EditorGUILayout.ScrollViewScope (_scrollPos)) {
-				_scrollPos = scrollView.scrollPosition;
-				view.OnGUI ();
-				selectedIndex = view._slideList.index;
-			}
 
-			view.so.ApplyModifiedProperties ();
-		}
+                // 最後の要素を選択状態にする
+                slideList.index = slideList.count - 1;
+                // 増やした場合のみこちらで変更
+                USCameraController.Instance.events.UpdateMap(USCameraController.Instance.slideObject);
+                Repaint();
+            });
 
-		public UniSlideData CreateCamera(){
-			
-			var srcTran = SceneCamera.transform;
-			var data = new UniSlideData(srcTran.position, srcTran.rotation);
-			//親に child オブジェクトを追加
-			AssetDatabase.AddObjectToAsset (data.rt, _soPath);
+            view.OnRemoveItemAsObservable().Subscribe(slideList =>
+            {
+                USCameraController.Instance.slideObject.DeleteRT(slideList.index);
+                AssetDatabase.ImportAsset(_soPath);
+                ReorderableList.defaultBehaviours.DoRemoveButton(slideList);
+                Repaint();
+            });
 
-			//インポート処理を走らせて最新の状態にする
-			AssetDatabase.ImportAsset (_soPath);
-			return data;
-		}
+            view.OnSelectItemAsObservable().Subscribe(slideList =>
+            {
+                selectedIndex = slideList.index;
+            });
+        }
 
-		public Camera SceneCamera{
-			get{ return SceneView.lastActiveSceneView.camera; }
-		}
+        void OnInspectorUpdate()
+        {
+            // UniSlideで使用する共通のUpdate
+            ScriptableSingleton<USEventBus>.instance.DoUpdate();
+            Repaint();
+        }
 
-	}
+        void OnGUI()
+        {
+            InitializeIfNeeded();
+
+            if (uniSlideObject == null)
+            {
+                EditorGUILayout.LabelField("slidedata is null");
+                return;
+            }
+
+            view.SetSOIfNull(uniSlideObject);
+
+			selectedIndex = view._slideList.index;
+
+            view.OnGUI();
+
+        }
+
+        public UniSlideData CreateCamera()
+        {
+            var srcTran = SceneCamera.transform;
+            var data = new UniSlideData(srcTran.position, srcTran.rotation);
+            //親に child オブジェクトを追加
+            AssetDatabase.AddObjectToAsset(data.rt, _soPath);
+
+            //インポート処理を走らせて最新の状態にする
+            AssetDatabase.ImportAsset(_soPath);
+            return data;
+        }
+
+        public Camera SceneCamera
+        {
+            get { return SceneView.lastActiveSceneView.camera; }
+        }
+
+    }
 }

@@ -7,33 +7,43 @@ using UnityEditor;
 
 namespace UniSlide
 {
-	[System.Serializable]
-	public class UniSlideListWindowView : IGUI
-	{
-		Subject<ReorderableList> onAddItemSubject = new Subject<ReorderableList>();
-		public IObservable<ReorderableList> OnAddItemAsObservable(){
-			return onAddItemSubject;
-		}
+    [System.Serializable]
+    public class UniSlideListWindowView : IGUI
+    {
+        Subject<ReorderableList> onAddItemSubject = new Subject<ReorderableList>();
+        public IObservable<ReorderableList> OnAddItemAsObservable()
+        {
+            return onAddItemSubject;
+        }
 
-		Subject<ReorderableList> onRemoveItemSubject = new Subject<ReorderableList>();
-		public IObservable<ReorderableList> OnRemoveItemAsObservable(){
-			return onRemoveItemSubject;
-		}
+        Subject<ReorderableList> onRemoveItemSubject = new Subject<ReorderableList>();
+        public IObservable<ReorderableList> OnRemoveItemAsObservable()
+        {
+            return onRemoveItemSubject;
+        }
 
-		Subject<ReorderableList> onSelectItemSubject = new Subject<ReorderableList>();
-		public IObservable<ReorderableList> OnSelectItemAsObservable(){
-			return onSelectItemSubject;
-		}
+        Subject<ReorderableList> onSelectItemSubject = new Subject<ReorderableList>();
+        public IObservable<ReorderableList> OnSelectItemAsObservable()
+        {
+            return onSelectItemSubject;
+        }
 
 
-		public ReorderableList _slideList = null;
+        public ReorderableList _slideList = null;
 
+        private Vector2 _scrollPos = Vector2.zero;
 
-		public SerializedObject so = null;
+        public SerializedObject so = null;
+        public void SetSOIfNull(UniSlideObject uniSlideObject) {
+            if (so == null)
+                ResetList(uniSlideObject);
+        }
+
 
 		public UniSlideListWindowView ()
 		{
 		}
+
 
 		public void ResetList (UniSlideObject uniSlideObject)
 		{
@@ -92,8 +102,21 @@ namespace UniSlide
 
 		public void OnGUI ()
 		{
-			// リスト表示
-			_slideList.DoLayoutList ();
+            if (so == null)
+            {
+                EditorGUILayout.LabelField("so is null");
+                return;
+            }
+            
+
+            so.Update();
+            using (var scrollView = new EditorGUILayout.ScrollViewScope(_scrollPos))
+            {
+                _scrollPos = scrollView.scrollPosition;
+                // リスト表示
+                _slideList.DoLayoutList();
+            }
+            so.ApplyModifiedProperties();
 		}
 	}
 }
